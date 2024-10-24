@@ -1,21 +1,73 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #333333;
+  --primary: #0056b3;
+  --secondary: #6c757d;
+  --success: #28a745;
+  --info: #17a2b8;
+  --warning: #ffc107;
+  --danger: #dc3545;
+  --light: #f8f9fa;
+  --dark: #343a40;
+  --gray-light: #f1f3f5;
+  --gray-dark: #495057;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #181818;
+    --foreground: #e0e0e0;
+    --primary: #82b1ff;
+    --secondary: #b0bec5;
+    --success: #66bb6a;
+    --info: #4dd0e1;
+    --warning: #ffeb3b;
+    --danger: #f44336;
+    --light: #424242;
+    --dark: #212121;
+    --gray-light: #303030;
+    --gray-dark: #757575;
   }
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.6;
+  margin: 0;
+  padding: 0;
 }
+
+input, button {
+  background-color: var(--gray-light);
+  color: var(--foreground);
+  border: 1px solid var(--gray-dark);
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  margin: 0.5rem 0;
+}
+
+button {
+  background-color: var(--primary);
+  color: var(--light);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease-in-out;
+}
+
+button:hover {
+  background-color: var(--info);
+}
+
+button:disabled {
+  background-color: var(--secondary);
+  cursor: not-allowed;
+}
+
+

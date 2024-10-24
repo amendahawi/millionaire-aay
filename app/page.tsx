@@ -1,101 +1,180 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React, { useState, useEffect } from 'react';
+import { openai } from '../openaiConfig';
+import './HomePage.css'; // Import the CSS file
+
+const HomePage = () => {
+  const [message, setMessage] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [currentQuestion, setCurrentQuestion] = useState<string>('');
+  const [responses, setResponses] = useState<string[]>([]);
+  const [responseInput, setResponseInput] = useState<string>('');
+  const [questionCount, setQuestionCount] = useState<number>(0);
+  const [isUploadClicked, setIsUploadClicked] = useState<boolean>(false);
+  const [isResult, setIsResult] = useState<boolean>(false);
+  const [result, setResult] = useState<string>('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Client-side only code
+    }
+  }, []);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      setFile(files[0]);
+    } else {
+      setFile(null);
+    }
+  };
+
+  const handleClick = async () => {
+    if (!file) {
+      setMessage('Please upload a resume file.');
+      return;
+    }
+
+    setIsUploadClicked(true);
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const fileContent = event.target?.result;
+      if (typeof fileContent === 'string') {
+        try {
+          const maxContentLength = 10000;
+          const truncatedContent = fileContent.length > maxContentLength 
+            ? fileContent.substring(0, maxContentLength) 
+            : fileContent;
+
+          const prompt = `Based on the following resume content, please ask the user a personalized question mentioning specific points from their resume to determine if they are likely to become a millionaire: ${truncatedContent}`;
+
+          const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+              {
+                role: "system",
+                content: "You are an AI asking personalized questions mentioning specific points from the resume to determine if someone is likely to become a millionaire.",
+              },
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+          });
+
+          const text = response.choices[0]?.message?.content?.trim() || '';
+          setCurrentQuestion(text);
+          setQuestionCount(1);
+        } catch (error) {
+          console.error('Error generating question:', error);
+          setMessage('Failed to generate question');
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleResponseChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setResponseInput(event.target.value);
+  };
+
+  const handleSubmitResponse = async () => {
+    const newResponses = [...responses, responseInput];
+    setResponses(newResponses);
+    setResponseInput('');
+
+    if (questionCount >= 4) {
+      try {
+        const prompt = `Based on the following resume content and responses, determine the likelihood of the user becoming a millionaire: ${responses.join(' ')} ${responseInput}`;
+
+        const response = await openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system",
+              content: "You are an AI determining the likelihood of someone becoming a millionaire.",
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+        });
+
+        const text = response.choices[0]?.message?.content?.trim() || '';
+        setResult(text);
+        setIsResult(true);
+      } catch (error) {
+        console.error('Error determining likelihood:', error);
+        setMessage('Failed to determine likelihood');
+      }
+    } else {
+      try {
+        const prompt = `Based on the following resume content and previous responses, please ask the user the next personalized question mentioning specific points from their resume to determine if they are likely to become a millionaire: ${responses.join(' ')} ${responseInput}`;
+
+        const response = await openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system",
+              content: "You are an AI asking personalized questions mentioning specific points from the resume to determine if someone is likely to become a millionaire.",
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+        });
+
+        const text = response.choices[0]?.message?.content?.trim() || '';
+        setCurrentQuestion(text);
+        setQuestionCount(questionCount + 1);
+      } catch (error) {
+        console.error('Error generating next question:', error);
+        setMessage('Failed to generate next question');
+      }
+    }
+  };
+
+  const handleReturnHome = () => {
+    setIsUploadClicked(false);
+    setIsResult(false);
+    setMessage('');
+    setFile(null);
+    setCurrentQuestion('');
+    setResponses([]);
+    setResponseInput('');
+    setQuestionCount(0);
+    setResult('');
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="container">
+      {!isUploadClicked && <h1>Will you become a millionaire?</h1>}
+      {!isUploadClicked && <input type="file" onChange={handleFileChange} />}
+      {!isUploadClicked && <button onClick={handleClick}>Upload</button>}
+      {currentQuestion && !isResult && (
+        <div>
+          <p>{currentQuestion}</p>
+          <input
+            type="text"
+            value={responseInput}
+            onChange={handleResponseChange}
+          />
+          <button onClick={handleSubmitResponse}>Submit</button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      )}
+      {isResult && (
+        <div>
+          <p>{result}</p>
+          <button onClick={handleReturnHome}>Return to Homepage</button>
+        </div>
+      )}
+      {message && <p>{message}</p>}
     </div>
   );
-}
+};
+
+export default HomePage;
