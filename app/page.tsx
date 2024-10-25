@@ -1,79 +1,40 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { openai } from '../openaiConfig';
-import './HomePage.css'; // Import the CSS file
 
 const HomePage = () => {
-  const [message, setMessage] = useState('');
-  const [file, setFile] = useState<File | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<string>('');
   const [responses, setResponses] = useState<string[]>([]);
   const [responseInput, setResponseInput] = useState<string>('');
   const [questionCount, setQuestionCount] = useState<number>(0);
-  const [isUploadClicked, setIsUploadClicked] = useState<boolean>(false);
+  const [isStarted, setIsStarted] = useState<boolean>(false);
   const [isResult, setIsResult] = useState<boolean>(false);
   const [result, setResult] = useState<string>('');
+  const [message, setMessage] = useState<string>('');
+  const [millionairePotential, setMillionairePotential] = useState<string>('');
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // Client-side only code
-    }
-  }, []);
-
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      setFile(files[0]);
-    } else {
-      setFile(null);
-    }
+  const startQuestionnaire = async () => {
+    setIsStarted(true);
+    await askNextQuestion();
   };
 
-  const handleClick = async () => {
-    if (!file) {
-      setMessage('Please upload a resume file.');
-      return;
+  const askNextQuestion = async () => {
+    try {
+      const questions = [
+        "What university do you attend or plan to attend?",
+        "What are your long-term career goals?",
+        "How would you describe your work ethic?",
+        "What's your approach to personal finance and saving?",
+        "Do you have any entrepreneurial aspirations?"
+      ];
+
+      setCurrentQuestion(questions[questionCount]);
+      setQuestionCount(questionCount + 1);
+    } catch (error) {
+      console.error('Error generating question:', error);
+      setMessage('Failed to generate question');
     }
-
-    setIsUploadClicked(true);
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const fileContent = event.target?.result;
-      if (typeof fileContent === 'string') {
-        try {
-          const maxContentLength = 10000;
-          const truncatedContent = fileContent.length > maxContentLength 
-            ? fileContent.substring(0, maxContentLength) 
-            : fileContent;
-
-          const prompt = `Based on the following resume content, please ask the user a personalized question mentioning specific points from their resume to determine if they are likely to become a millionaire: ${truncatedContent}`;
-
-          const response = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [
-              {
-                role: "system",
-                content: "You are an AI asking personalized questions mentioning specific points from the resume to determine if someone is likely to become a millionaire.",
-              },
-              {
-                role: "user",
-                content: prompt,
-              },
-            ],
-          });
-
-          const text = response.choices[0]?.message?.content?.trim() || '';
-          setCurrentQuestion(text);
-          setQuestionCount(1);
-        } catch (error) {
-          console.error('Error generating question:', error);
-          setMessage('Failed to generate question');
-        }
-      }
-    };
-    reader.readAsText(file);
   };
 
   const handleResponseChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,16 +46,23 @@ const HomePage = () => {
     setResponses(newResponses);
     setResponseInput('');
 
-    if (questionCount >= 4) {
+    if (questionCount >= 5) {
       try {
-        const prompt = `Based on the following resume content and responses, determine the likelihood of the user becoming a millionaire: ${responses.join(' ')} ${responseInput}`;
+        const prompt = `Based on the following responses to a questionnaire about becoming a millionaire, analyze the likelihood of this person achieving millionaire status:
+        1. University: ${newResponses[0]}
+        2. Career goals: ${newResponses[1]}
+        3. Work ethic: ${newResponses[2]}
+        4. Personal finance approach: ${newResponses[3]}
+        5. Entrepreneurial aspirations: ${newResponses[4]}
+        
+        Provide a detailed analysis of their millionaire potential based on these factors. Keep your answer concise. Start with either "You are likely to be a millionaire" or "You are not likely to be a millionaire" based on your analysis.`;
 
         const response = await openai.chat.completions.create({
           model: "gpt-3.5-turbo",
           messages: [
             {
               role: "system",
-              content: "You are an AI determining the likelihood of someone becoming a millionaire.",
+              content: "You are an AI analyzing the likelihood of someone becoming a millionaire based on their responses to a questionnaire.",
             },
             {
               role: "user",
@@ -105,74 +73,82 @@ const HomePage = () => {
 
         const text = response.choices[0]?.message?.content?.trim() || '';
         setResult(text);
+        setMillionairePotential(text.startsWith("You are likely") ? "You are likely to be a millionaire" : "You are not likely to be a millionaire");
         setIsResult(true);
       } catch (error) {
         console.error('Error determining likelihood:', error);
         setMessage('Failed to determine likelihood');
       }
     } else {
-      try {
-        const prompt = `Based on the following resume content and previous responses, please ask the user the next personalized question mentioning specific points from their resume to determine if they are likely to become a millionaire: ${responses.join(' ')} ${responseInput}`;
-
-        const response = await openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "system",
-              content: "You are an AI asking personalized questions mentioning specific points from the resume to determine if someone is likely to become a millionaire.",
-            },
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-        });
-
-        const text = response.choices[0]?.message?.content?.trim() || '';
-        setCurrentQuestion(text);
-        setQuestionCount(questionCount + 1);
-      } catch (error) {
-        console.error('Error generating next question:', error);
-        setMessage('Failed to generate next question');
-      }
+      await askNextQuestion();
     }
   };
 
   const handleReturnHome = () => {
-    setIsUploadClicked(false);
+    setIsStarted(false);
     setIsResult(false);
     setMessage('');
-    setFile(null);
     setCurrentQuestion('');
     setResponses([]);
     setResponseInput('');
     setQuestionCount(0);
     setResult('');
+    setMillionairePotential('');
   };
 
   return (
-    <div className="container">
-      {!isUploadClicked && <h1>Will you become a millionaire?</h1>}
-      {!isUploadClicked && <input type="file" onChange={handleFileChange} />}
-      {!isUploadClicked && <button onClick={handleClick}>Upload</button>}
+    <div className="game-container">
+      <div className="game-header">
+        <h1>🚀 Millionaire Quest 💰</h1>
+        <p>Discover your millionaire potential through our insightful questionnaire!</p>
+      </div>
+
+      {!isStarted && (
+        <div className="game-intro">
+          <button onClick={startQuestionnaire} className="start-quest-btn">
+            🔮 Start Your Quest
+          </button>
+        </div>
+      )}
+
       {currentQuestion && !isResult && (
-        <div>
-          <p>{currentQuestion}</p>
-          <input
-            type="text"
-            value={responseInput}
-            onChange={handleResponseChange}
-          />
-          <button onClick={handleSubmitResponse}>Submit</button>
+        <div className="question-arena">
+          <div className="progress-bar">
+            <div className="progress" style={{width: `${questionCount * 20}%`}}></div>
+          </div>
+          <h2>Question {questionCount} of 5</h2>
+          <div className="question-bubble">
+            <p>{currentQuestion}</p>
+          </div>
+          <div className="response-area">
+            <input
+              type="text"
+              value={responseInput}
+              onChange={handleResponseChange}
+              placeholder="Type your answer here..."
+              className="response-input"
+            />
+            <button onClick={handleSubmitResponse} className="submit-btn">
+              Submit Answer
+            </button>
+          </div>
         </div>
       )}
+
       {isResult && (
-        <div>
-          <p>{result}</p>
-          <button onClick={handleReturnHome}>Return to Homepage</button>
+        <div className="result-reveal">
+          <h2>🎉 Your Millionaire Potential Analysis 🎉</h2>
+          <h3>{millionairePotential}</h3>
+          <div className="result-scroll">
+            <p>{result}</p>
+          </div>
+          <button onClick={handleReturnHome} className="play-again-btn">
+            Take the Quiz Again
+          </button>
         </div>
       )}
-      {message && <p>{message}</p>}
+
+      {message && <p className="message">{message}</p>}
     </div>
   );
 };
