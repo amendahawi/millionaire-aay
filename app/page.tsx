@@ -1,154 +1,162 @@
 "use client";
 
-import React, { useState } from 'react';
-import { openai } from '../openaiConfig';
+import React, { useState, useEffect } from "react";
+import { openai } from "../openaiConfig";
 
 const HomePage = () => {
-  const [currentQuestion, setCurrentQuestion] = useState<string>('');
-  const [responses, setResponses] = useState<string[]>([]);
-  const [responseInput, setResponseInput] = useState<string>('');
-  const [questionCount, setQuestionCount] = useState<number>(0);
-  const [isStarted, setIsStarted] = useState<boolean>(false);
-  const [isResult, setIsResult] = useState<boolean>(false);
-  const [result, setResult] = useState<string>('');
-  const [message, setMessage] = useState<string>('');
-  const [millionairePotential, setMillionairePotential] = useState<string>('');
+  const [userInfo, setUserInfo] = useState({
+    name: "",
+    age: "",
+    school: "",
+    career: "",
+  });
+  const [isStarted, setIsStarted] = useState(false);
+  const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
+  const [userResponse, setUserResponse] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [assessmentComplete, setAssessmentComplete] = useState(false);
+  const [millionairePotential, setMillionairePotential] = useState<boolean | null>(null);
 
-  const startQuestionnaire = async () => {
+  const handleUserInfoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setUserInfo((prevInfo) => ({ ...prevInfo, [name]: value }));
+  };
+
+  const handleUserInfoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setIsStarted(true);
-    await askNextQuestion();
+    setIsLoading(true);
+    await startConversation();
+    setIsLoading(false);
   };
 
-  const askNextQuestion = async () => {
+  const startConversation = async () => {
     try {
-      const questions = [
-        "What university do you attend or plan to attend?",
-        "What are your long-term career goals?",
-        "How would you describe your work ethic?",
-        "What's your approach to personal finance and saving?",
-        "Do you have any entrepreneurial aspirations?"
-      ];
+      const initialPrompt = `You are an AI assessing millionaire potential. Start a conversation with the user to assess their potential to become a millionaire. Ask questions one at a time, waiting for the user's response before asking the next question. After 4 messages, provide a final assessment. Begin by greeting ${userInfo.name} and asking the first question.`;
 
-      setCurrentQuestion(questions[questionCount]);
-      setQuestionCount(questionCount + 1);
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system", content: initialPrompt },
+          { role: "user", content: `Name: ${userInfo.name}, Age: ${userInfo.age}, School: ${userInfo.school}, Career: ${userInfo.career}` },
+        ],
+      });
+
+      const aiMessage = response.choices[0]?.message?.content?.trim() || "";
+      setMessages([
+        { role: "assistant", content: aiMessage },
+      ]);
     } catch (error) {
-      console.error('Error generating question:', error);
-      setMessage('Failed to generate question');
+      console.error("Error starting conversation:", error);
+      setMessages([{ role: "assistant", content: "Sorry, I encountered an error. Please try again." }]);
     }
   };
 
-  const handleResponseChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setResponseInput(event.target.value);
-  };
+  const handleResponseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userResponse.trim()) return;
 
-  const handleSubmitResponse = async () => {
-    const newResponses = [...responses, responseInput];
-    setResponses(newResponses);
-    setResponseInput('');
+    setMessages(prevMessages => [...prevMessages, { role: "user", content: userResponse }]);
+    setUserResponse("");
+    setIsLoading(true);
 
-    if (questionCount >= 5) {
-      try {
-        const prompt = `Based on the following responses to a questionnaire about becoming a millionaire, analyze the likelihood of this person achieving millionaire status:
-        1. University: ${newResponses[0]}
-        2. Career goals: ${newResponses[1]}
-        3. Work ethic: ${newResponses[2]}
-        4. Personal finance approach: ${newResponses[3]}
-        5. Entrepreneurial aspirations: ${newResponses[4]}
-        
-        Provide a detailed analysis of their millionaire potential based on these factors. Keep your answer concise. Start with either "You are likely to be a millionaire" or "You are not likely to be a millionaire" based on your analysis.`;
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          { role: "system" as const, content: "You are an AI assessing millionaire potential. Continue the conversation, asking relevant questions. After 4 messages, provide a final assessment." },
+          ...messages.map(msg => ({ ...msg, role: msg.role as "assistant" | "user" })),
+          { role: "user" as const, content: userResponse },
+        ],
+      });
 
-        const response = await openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "system",
-              content: "You are an AI analyzing the likelihood of someone becoming a millionaire based on their responses to a questionnaire.",
-            },
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-        });
+      const aiMessage = response.choices[0]?.message?.content?.trim() || "";
+      setMessages(prevMessages => [...prevMessages, { role: "assistant", content: aiMessage }]);
 
-        const text = response.choices[0]?.message?.content?.trim() || '';
-        setResult(text);
-        setMillionairePotential(text.startsWith("You are likely") ? "You are likely to be a millionaire" : "You are not likely to be a millionaire");
-        setIsResult(true);
-      } catch (error) {
-        console.error('Error determining likelihood:', error);
-        setMessage('Failed to determine likelihood');
+      if (messages.length >= 7) { // 4 user messages + 4 AI messages (including initial greeting)
+        setAssessmentComplete(true);
+        // Simple check for positive assessment (you might want to implement a more sophisticated analysis)
+        setMillionairePotential(aiMessage.toLowerCase().includes("high potential") || aiMessage.toLowerCase().includes("likely to become a millionaire"));
       }
-    } else {
-      await askNextQuestion();
+    } catch (error) {
+      console.error("Error in conversation:", error);
+      setMessages(prevMessages => [...prevMessages, { role: "assistant", content: "Sorry, I encountered an error. Please try again." }]);
     }
+
+    setIsLoading(false);
   };
 
-  const handleReturnHome = () => {
+  const handleRetry = () => {
     setIsStarted(false);
-    setIsResult(false);
-    setMessage('');
-    setCurrentQuestion('');
-    setResponses([]);
-    setResponseInput('');
-    setQuestionCount(0);
-    setResult('');
-    setMillionairePotential('');
+    setMessages([]);
+    setUserResponse("");
+    setAssessmentComplete(false);
+    setMillionairePotential(null);
+    setUserInfo({
+      name: "",
+      age: "",
+      school: "",
+      career: "",
+    });
   };
 
   return (
-    <div className="game-container">
+    <div className="">
       <div className="game-header">
-        <h1>🚀 Millionaire Quest 💰</h1>
-        <p>Discover your millionaire potential through our insightful questionnaire!</p>
+        <h1>MILLIONAIRE QUEST!</h1>
+        <p><b>Do you have potential to become a millionaire in the next 5 years?</b></p>
       </div>
 
-      {!isStarted && (
-        <div className="game-intro">
-          <button onClick={startQuestionnaire} className="start-quest-btn">
-            🔮 Start Your Quest
-          </button>
+      {!isStarted ? (
+        <form onSubmit={handleUserInfoSubmit} className="user-info-form">
+          {Object.entries(userInfo).map(([key, value]) => (
+            <div key={key} className="input-group">
+              <span className="input-label">{`Your ${key.charAt(0).toUpperCase() + key.slice(1)}:`}</span>
+              <input
+                type={key === 'age' ? 'number' : 'text'}
+                name={key}
+                value={value}
+                onChange={handleUserInfoChange}
+                placeholder={key}
+                required
+                className="user-info-input"
+              />
+            </div>
+          ))}
+          <button type="submit" className="start-quest-btn">Start Quest</button>
+        </form>
+      ) : assessmentComplete ? (
+        <div className="assessment-result">
+          <h2>{millionairePotential ? "Congratulations!" : "Keep Working Hard!"}</h2>
+          <p>{millionairePotential 
+            ? "You have high potential to become a millionaire in the next 5 years!" 
+            : "While you may not become a millionaire in the next 5 years, keep pursuing your goals!"}
+          </p>
+          <button onClick={handleRetry} className="retry-btn">Try Again</button>
         </div>
-      )}
-
-      {currentQuestion && !isResult && (
-        <div className="question-arena">
-          <div className="progress-bar">
-            <div className="progress" style={{width: `${questionCount * 20}%`}}></div>
+      ) : (
+        <div className="chat-container">
+          <div className="chat-messages">
+            {messages.map((message, index) => (
+              <div key={index} className={`message ${message.role}`}>
+                {message.content}
+              </div>
+            ))}
           </div>
-          <h2>Question {questionCount} of 5</h2>
-          <div className="question-bubble">
-            <p>{currentQuestion}</p>
-          </div>
-          <div className="response-area">
+          <form onSubmit={handleResponseSubmit} className="chat-input-form">
             <input
               type="text"
-              value={responseInput}
-              onChange={handleResponseChange}
-              placeholder="Type your answer here..."
-              className="response-input"
+              value={userResponse}
+              onChange={(e) => setUserResponse(e.target.value)}
+              placeholder="Send a message..."
+              disabled={isLoading}
             />
-            <button onClick={handleSubmitResponse} className="submit-btn">
-              Submit Answer
+            <button type="submit" disabled={isLoading}>
+              {isLoading ? "Processing..." : "Send"}
             </button>
-          </div>
+          </form>
         </div>
       )}
-
-      {isResult && (
-        <div className="result-reveal">
-          <h2>🎉 Your Millionaire Potential Analysis 🎉</h2>
-          <h3>{millionairePotential}</h3>
-          <div className="result-scroll">
-            <p>{result}</p>
-          </div>
-          <button onClick={handleReturnHome} className="play-again-btn">
-            Take the Quiz Again
-          </button>
-        </div>
-      )}
-
-      {message && <p className="message">{message}</p>}
     </div>
   );
 };
